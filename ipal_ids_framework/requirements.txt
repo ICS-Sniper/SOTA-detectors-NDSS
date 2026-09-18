@@ -1,0 +1,12 @@
+numpy
+tensorflow
+graphviz
+scikit-learn
+keras
+torch
+matplotlib
+pandas
+gurobipy
+cython
+orjson
+zlib-ng

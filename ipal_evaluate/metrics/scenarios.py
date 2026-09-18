@@ -1,0 +1,311 @@
+import numpy as np
+
+import evaluate.settings as settings
+
+from .metric import Metric
+
+
+class DetectedScenarios(Metric):
+    _name = "Detected-Scenarios"
+    _description = "Detected scenarios lists the attack scenarios detected by at least a single alarm."
+    _requires = []
+    _requires_timed_dataset = False
+    _requires_attacks = True
+    _higher_is_better = True
+
+    @classmethod
+    def calculate(
+        cls,
+        truth=None,
+        predicted=None,
+        dataset=None,
+        attacks=None,
+        ergs=None,
+    ):
+        assert dataset is not None and attacks is not None
+        scenarios = set()
+
+        attackids = {att["ipalid"]: att["id"] for att in attacks if "ipalid" in att}
+
+        for d in dataset:
+            if d["ids"]:  # if there is an alert
+                if "ipalid" in d and d["ipalid"] in attackids:  # detected by ipalid
+                    scenarios.add((attackids[d["ipalid"]], None, None))
+
+                for att in attacks:  # detected time range
+                    if "start" in att and "end" in att:
+                        if (
+                            att["start"] - settings.alarm_gracetime
+                            <= d["timestamp"]
+                            <= att["end"] + settings.alarm_gracetime
+                        ):
+                            scenarios.add((att["id"], att["start"], att["end"]))
+
+        return {cls._name: sorted([s[0] for s in scenarios])}
+
+
+class DetectedScenariosPercent(Metric):
+    _name = "Detected-Scenarios-Percent"
+    _description = "Proportion of attack scenarios that were detected by the IIDS."
+    _requires = ["Detected-Scenarios"]
+    _requires_timed_dataset = False
+    _requires_attacks = True
+    _higher_is_better = True
+
+    @classmethod
+    def calculate(
+        cls,
+        truth=None,
+        predicted=None,
+        dataset=None,
+        attacks=None,
+        ergs=None,
+    ):
+        assert attacks is not None and ergs is not None
+        scenarios = set(ergs["Detected-Scenarios"])
+        uniqueattacks = set([a["id"] for a in attacks])
+
+        return {cls._name: len(scenarios) / len(uniqueattacks)}
+
+
+class ScenarioRecall(Metric):
+    _name = "Scenario-Recall"
+    _description = "Recall measurement on a per-attack-scenario basis."
+    _requires = []
+    _requires_timed_dataset = False
+    _requires_attacks = True
+    _higher_is_better = True
+
+    @classmethod
+    def calculate(
+        cls,
+        truth=None,
+        predicted=None,
+        dataset=None,
+        attacks=None,
+        ergs=None,
+    ):
+        assert attacks is not None and dataset is not None
+        scenarios = {a["id"]: {"tp": 0, "fn": 0} for a in attacks}
+
+        for d in dataset:
+            if not d["malicious"]:
+                continue
+
+            if d["malicious"] not in scenarios:
+                settings.logger.warning(f"Scenario '{d['malicious']}' not found!")
+                continue
+
+            if d["ids"]:
+                scenarios[d["malicious"]]["tp"] += 1
+            else:
+                scenarios[d["malicious"]]["fn"] += 1
+
+        for k, v in scenarios.items():
+            if v["tp"] + v["fn"] == 0:
+                scenarios[k] = 0
+            else:
+                scenarios[k] = v["tp"] / (v["tp"] + v["fn"])
+
+        return {cls._name: scenarios}
+
+
+class PenaltyScore(Metric):
+    _name = "Penalty-Score"
+    _description = "Penalty Score (PS) is the length of detection results outside their overlap with attack scenarios (cf. TABOR paper)."
+    _requires = []
+    _requires_timed_dataset = True
+    _requires_attacks = True
+    _higher_is_better = False
+
+    @classmethod
+    def calculate(
+        cls,
+        truth=None,
+        predicted=None,
+        dataset=None,
+        attacks=None,
+        ergs=None,
+    ):
+        assert attacks is not None and dataset is not None
+        ps = 0
+        prev = dataset[0]["timestamp"]
+
+        for d in dataset:
+            if d["ids"]:
+                for attack in attacks:
+                    if attack["start"] <= d["timestamp"] <= attack["end"]:
+                        break
+                else:
+                    ps += d["timestamp"] - prev
+
+            prev = d["timestamp"]
+
+        return {cls._name: ps}
+
+
+class DetectionDelay(Metric):
+    _name = "Detection-Delay"
+    _description = "The detection delay aggregates the time intervals between the start of an attack and the time of the first detection."
+    _requires_timed_dataset = True
+    _requires_attacks = True
+    _higher_is_better = False
+
+    @classmethod
+    def calculate(
+        cls,
+        truth=None,
+        predicted=None,
+        dataset=None,
+        attacks=None,
+        ergs=None,
+    ):
+        # Desired behaviour: measure the time between the earliest attack start
+        # and the first alert that occurs at or after that time. Return +inf
+        # when no attack start or no alert after the first attack start exists.
+        assert dataset is not None and attacks is not None
+
+        if not attacks or not dataset:
+            return {cls._name: np.inf}
+
+        # find earliest attack start time
+        starts = [att.get("start") for att in attacks if "start" in att]
+        if not starts:
+            return {cls._name: np.inf}
+
+        first_attack_start = min(starts)
+
+        # find first alert record at/after first_attack_start
+        for d in dataset:
+            ts = d.get("timestamp")
+            if ts is None:
+                continue
+            if ts >= first_attack_start and d.get("ids"):
+                return {cls._name: ts - first_attack_start}
+
+        # no alert found after first attack start
+        return {cls._name: np.inf}
+
+class DetectionOverlap(Metric):
+    _name = "Detection-Overlap"
+    _description = "Duration of overlap between alerts and each attack window (per attack)."
+    _requires = []
+    _requires_timed_dataset = True
+    _requires_attacks = True
+    _higher_is_better = False
+
+    @classmethod
+    def calculate(
+        cls,
+        truth=None,
+        predicted=None,
+        dataset=None,
+        attacks=None,
+        ergs=None,
+    ):
+        assert dataset is not None and attacks is not None
+
+        # Initialize overlap durations per attack id
+        overlaps = {attack["id"]: 0.0 for attack in attacks}
+
+        if not dataset:
+            return {cls._name: overlaps}
+
+        # Iterate over consecutive samples to accumulate alert-active intervals
+        prev_ts = dataset[0]["timestamp"]
+        prev_alert = bool(dataset[0].get("ids", False))
+
+        for rec in dataset[1:]:
+            curr_ts = rec["timestamp"]
+            # if alert was active during [prev_ts, curr_ts), add overlap for each attack
+            if prev_alert:
+                for attack in attacks:
+                    astart = attack.get("start")
+                    aend = attack.get("end")
+                    if astart is None or aend is None:
+                        continue
+                    # compute overlap between [prev_ts, curr_ts) and [astart, aend]
+                    overlap = max(0.0, min(curr_ts, aend) - max(prev_ts, astart))
+                    if overlap > 0:
+                        overlaps[attack["id"]] += overlap
+
+            prev_ts = curr_ts
+            prev_alert = bool(rec.get("ids", False))
+
+        return {cls._name: overlaps}
+
+
+class AverageTimeToDetection(Metric):
+    _name = "Average-Time-to-Detection"
+    _description = "Average time to detection (TTD) measures the average time between the start of an attack and the begining of the alert."
+    _requires = ["Detected-Scenarios"]
+    _requires_timed_dataset = True
+    _requires_attacks = True
+    _higher_is_better = False
+
+    @classmethod
+    def calculate(
+        cls,
+        truth=None,
+        predicted=None,
+        dataset=None,
+        attacks=None,
+        ergs=None,
+    ):
+        assert dataset is not None and attacks is not None and ergs is not None
+
+        # Filter attacks once before iterating over dataset
+        detected_scenarios = set(ergs["Detected-Scenarios"])
+        active_attacks = [
+            attack for attack in attacks if attack["id"] in detected_scenarios
+        ]
+        if not active_attacks:
+            return {cls._name: np.nan}
+
+        delay = {attack["id"]: np.inf for attack in active_attacks}
+
+        for d in dataset:
+            if d["ids"]:  # ids alert
+                for attack in active_attacks:  # for (remaining) attack
+                    if (
+                        attack["start"]
+                        <= d["timestamp"]
+                        <= attack["end"] + settings.alarm_gracetime
+                    ):
+                        delay[attack["id"]] = min(
+                            delay[attack["id"]], d["timestamp"] - attack["start"]
+                        )
+
+        return {cls._name: np.mean(list(delay.values()))}
+
+class FirstDetectionTime(Metric):
+    _name = "First-Detection-Time"
+    _description = "First detection time (FDT) tells the time of the first alert after the start of the first attack scenario."
+    _requires = ["Detected-Scenarios"]
+    _requires_timed_dataset = True
+    _requires_attacks = True
+    _higher_is_better = False
+
+    @classmethod
+    def calculate(
+        cls,
+        truth=None,
+        predicted=None,
+        dataset=None,
+        attacks=None,
+        ergs=None,
+    ):
+        assert dataset is not None and attacks is not None and ergs is not None
+
+        # Filter attacks once before iterating over dataset
+        detected_scenarios = set(ergs["Detected-Scenarios"])
+        active_attacks = [
+            attack for attack in attacks if attack["id"] in detected_scenarios
+        ]
+        first_attack_start = min(attack["start"] for attack in active_attacks)
+
+        for d in dataset:
+            if d["ids"] and d["timestamp"] >= first_attack_start:
+                return {cls._name: d["timestamp"]}
+
+        return {cls._name: np.inf}

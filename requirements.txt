@@ -1,0 +1,28 @@
+# Core dependencies
+numpy
+pandas
+matplotlib
+scikit-learn
+openpyxl
+tensorflow
+
+# Network and data processing  
+opencv-python-headless
+orjson
+zlib-ng
+
+# ML/AI libraries
+ray[tune]
+
+# IPAL specific
+eTaPR @ https://github.com/saurf4ng/eTaPR/blob/main/eTaPR-22.6.1-py3-none-any.whl?raw=true
+affiliation @ git+https://github.com/ahstat/affiliation-metrics-py.git
+
+# Development tools
+notebook
+pre-commit
+black
+flake8
+pytest
+pytest-cov
+isort

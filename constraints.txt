@@ -1,0 +1,8 @@
+# Global constraints to ensure consistent, compatible versions across all IPAL modules
+# Rationale:
+# - We need NumPy 1.x because some native modules (and PyTorch on this env) were built against NumPy 1.x
+# - Recent OpenCV wheels (>=4.10) require NumPy>=2; use an older build compatible with NumPy 1.x
+#
+# Core
+numpy==1.26.4
+opencv-python-headless<4.10

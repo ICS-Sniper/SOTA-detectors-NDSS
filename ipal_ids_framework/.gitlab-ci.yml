@@ -1,0 +1,70 @@
+default:
+  image: "ubuntu:latest"
+
+  # https://docs.gitlab.com/ee/ci/yaml/#globally-defined-image-services-cache-before_script-after_script
+  before_script:
+    - apt-get update
+    - apt-get -y install software-properties-common sudo g++
+    - apt-get -y install pip vim
+    - apt-get -y install libgsl-dev git
+    - python3 --version
+    - pip3 install --break-system-packages numpy
+    - pip3 install --break-system-packages -r requirements-dev.txt
+
+.install_ipal:
+  script:
+    - pip3 install --break-system-packages -r requirements.txt
+    - cd ids/tabor/rti_plus
+    - make
+    - cd -
+
+stages:
+  - Static Analysis
+  - Test
+
+black:
+  stage: Static Analysis
+  script:
+  - black --check --config pyproject.toml .
+  allow_failure: true
+
+flake8:
+  stage: Static Analysis
+  script:
+  - flake8
+  allow_failure: true
+
+isort:
+  stage: Static Analysis
+  script:
+  - isort --profile black --filter-files -c .
+  allow_failure: true
+
+cffconvert:
+  stage: Static Analysis
+  script:
+  - cffconvert --validate -i CITATION.cff
+  allow_failure: true
+
+execute:
+  stage: Test
+  script:
+    - !reference [.install_ipal, script]
+    - ./ipal-iids --version
+    - ./ipal-visualize-model --version
+    - ./ipal-extend-alarms --version
+
+pytest:
+  stage: Test
+  script:
+    - !reference [.install_ipal, script]
+    - python3 -m pytest -vv --cov=ipal_iids --cov=ids --cov=preprocessors --cov-report term --cov-report xml:coverage.xml --cov-branch
+  coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+  artifacts:
+    when: always
+    paths:
+      - tests/snapshots/output/*
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
