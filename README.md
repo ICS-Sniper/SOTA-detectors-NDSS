@@ -79,7 +79,7 @@ All benign training data, attack inputs, and attack ground truth required by the
 
 ## Optional: complete detector suite
 
-This mode includes the same individual public detectors, adds InvariantRules and PASAD, and runs the original process Any/All ensembles instead of `Any-public` and `All-public`. The original ensembles retain `all_p.config` and their original combiner configurations unchanged. This mode requires obtaining the experiment implementations separately from the IPAL authors and installing their additional dependencies in the environment used by `ipal-iids`.
+This mode includes the same individual public detectors and adds InvariantRules and PASAD. To use it, obtain the implementations used in our experiments from the IPAL authors and install their additional dependencies in the environment used by `ipal-iids`.
 
 Place the implementations, including their supporting modules, under:
 
