@@ -17,7 +17,7 @@ The public repository supports the end-to-end workflow for the public subset bel
 | InvariantRules, PASAD | Excluded | Requires separately obtained implementations |
 | Original process Any/All with InvariantRules and PASAD | Uses the public process ensembles above instead | Requires both InvariantRules and PASAD |
 
-The public subset includes reproducible process Any/All ensembles built exclusively from Histogram, MinMax, and SteadyTime. Their results describe this three-detector ensemble, rather than the original process ensembles that also use InvariantRules and PASAD. Reproducing results involving those non-public implementations requires the complete detector suite described below. This limitation concerns the specific implementations used in our experiments, not the availability of other implementations of the same algorithms.
+The public subset includes reproducible process Any/All ensembles built exclusively from Histogram, MinMax, and SteadyTime. Reproducing results involving those non-public implementations requires the complete detector suite described below.
 
 ## Environment setup
 
@@ -68,18 +68,16 @@ Keep the default mode, select a scenario from 1 to 5, and run the cells from top
 
 ```python
 DETECTOR_MODE = "public"
-SCENARIO = 3
 ```
 
-The notebook checks inputs, trains the public detectors on the selected benign data, runs attack detection, evaluates the outputs, and creates separate network and process alert plots. It uses the already tuned configurations; training learns the models from benign inputs rather than searching configuration hyperparameters. The default workflow skips the separate benign-validation experiment. No non-public implementations or manual job-list edits are needed. Network Any/All use the public network detectors. Process plots contain Histogram, MinMax, SteadyTime, `Any-public`, and `All-public`.
+The notebook checks inputs, trains the public detectors on the selected benign data, runs attack detection, evaluates the outputs, and creates separate network and process alert plots. It uses the already tuned configurations; training learns the models from benign inputs rather than searching configuration hyperparameters. The default workflow skips the separate benign-validation experiment.
 
-For each scenario, `config/quick_start/S<S>/all_p_pub.config` contains exactly the three public process models, with the same parameters as their entries in `all_p.config`. `Any-public` reuses `combiner-Any.config` and alerts when at least one model alerts. `All-public` uses `combiner-All_p_pub.config`, which has three unit weights, threshold 3, and no lookahead: all three models must alert on the same state record. Both ensembles use Boolean alerts rather than confidence scores.
-
+Network Any/All use the public network detectors. Process plots contain Histogram, MinMax, SteadyTime, `Any-public`, and `All-public`.
 All benign training data, attack inputs, and attack ground truth required by the five scenarios are included under `dataset/`.
 
 ## Optional: complete detector suite
 
-This mode includes the same individual public detectors and adds InvariantRules and PASAD. To use it, obtain the implementations used in our experiments from the IPAL authors and install their additional dependencies in the environment used by `ipal-iids`.
+This mode includes the same individual public detectors and adds InvariantRules and PASAD. This mode requires obtaining the experiment implementations separately from the IPAL authors and installing their additional dependencies in the environment used by `ipal-iids`.
 
 Place the implementations, including their supporting modules, under:
 
@@ -92,18 +90,15 @@ In `quick_start.ipynb`, select:
 
 ```python
 DETECTOR_MODE = "full"
-SCENARIO = 3
 ```
 
-Restart the kernel and run all cells after changing modes. Before any training starts, the notebook checks that InvariantRules and PASAD (registered as `Pasad` in IPAL) can be loaded by the actual `ipal-iids` executable. If an implementation or an import dependency is missing, execution stops with instructions to install it or select `public` mode. It does not silently substitute public-only process ensembles for the original ensembles.
-
-Both modes share the same scenario inputs and execution pipeline. Passing the dependency check enables the full workflow; it does not by itself verify numerical agreement with the paper's results.
+Restart the kernel and run all cells after changing modes.
 
 ## Optional: benign validation
 
 The final section of `quick_start.ipynb` measures false positives on held-out benign runs. It is disabled by default, including when running all cells. To enable it, set `RUN_BENIGN_VALIDATION = True` in the final code cell and run that cell after completing the main workflow.
 
-This optional step requires at least two numbered benign message files and two numbered benign state files. It randomly selects separate training and validation runs and writes results to `quick_start_result/<mode>/validation/`. It does not tune configuration hyperparameters, and its trained models are not reused by attack detection. The default workflow only needs the selected network training file and the complete state training file listed for its scenario.
+This optional step requires at least two numbered benign message files and two numbered benign state files. It randomly selects separate training and validation runs and writes results to `quick_start_result/<mode>/validation/`. It does not tune configuration hyperparameters, and its trained models are not reused by attack detection.
 
 ## Optional raw-data transcription
 
@@ -140,9 +135,7 @@ Scenario directory numbers match the S-numbers used in plot names and paper resu
 
 ## Quick-start outputs
 
-Each mode has its own output directory: `utils/scenario-<S>-attack/quick_start_result/<mode>/`, where `<mode>` is `public` or `full`. Attack outputs, evaluation JSON files, logs, and the figures `S<S>-networkDetectors.png` and `S<S>-stateDetectors.png` are stored directly in the mode directory. The `validation/` subdirectory is created only when optional benign validation is enabled. Figure titles identify the selected mode. Public process ensemble outputs are named `Any-public.state.gz` and `All-public.state.gz`; full mode retains `Any.state.gz` and `All.state.gz` for the original process ensembles.
-
-Detection logs are named `ipal-<detector>.log` for network jobs and `state-<detector>.log` for process jobs. Their `first alert` entries refer to timestamps in the input data. In ensemble logs, these entries describe member detectors; use `ids: true` in the corresponding compressed output to identify the ensemble's final alarms. A first alarm may be a false positive before the labeled attack begins.
+Each mode has its own output directory: `utils/scenario-<S>-attack/quick_start_result/<mode>/`, where `<mode>` is `public` or `full`. Attack outputs, evaluation JSON files, logs, and the figures `S<S>-networkDetectors.png` and `S<S>-stateDetectors.png` are stored directly in the mode directory. Figure titles identify the selected mode.
 
 ## Repository layout
 
