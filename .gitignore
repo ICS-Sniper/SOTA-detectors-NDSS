@@ -23,6 +23,9 @@ ipal-dev/
 /ipal_ids_framework/ids/invariant_rules/
 /ipal_evaluate/Optimized-Weights-eTaF1-SWaT/
 /ipal_evaluate/Optimized-Weights-eTaF1-simple.py
+ipal_evaluate/tests
+/PUBLIC_RELEASE_WORKFLOW.md
+/tests/test_quick_start.py
 
 # Editors
 .vscode/

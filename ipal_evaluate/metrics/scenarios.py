@@ -280,8 +280,11 @@ class AverageTimeToDetection(Metric):
 
 class FirstDetectionTime(Metric):
     _name = "First-Detection-Time"
-    _description = "First detection time (FDT) tells the time of the first alert after the start of the first attack scenario."
-    _requires = ["Detected-Scenarios"]
+    _description = (
+        "Timestamp of the first final alert at or after the earliest attack start, "
+        "including alerts after the attack ends. None if no such alert exists."
+    )
+    _requires = []
     _requires_timed_dataset = True
     _requires_attacks = True
     _higher_is_better = False
@@ -295,17 +298,17 @@ class FirstDetectionTime(Metric):
         attacks=None,
         ergs=None,
     ):
-        assert dataset is not None and attacks is not None and ergs is not None
+        assert dataset is not None and attacks is not None
 
-        # Filter attacks once before iterating over dataset
-        detected_scenarios = set(ergs["Detected-Scenarios"])
-        active_attacks = [
-            attack for attack in attacks if attack["id"] in detected_scenarios
-        ]
-        first_attack_start = min(attack["start"] for attack in active_attacks)
+        starts = [attack["start"] for attack in attacks if "start" in attack]
+        if not starts:
+            return {cls._name: None}
+        first_attack_start = min(starts)
 
+        # The evaluator validates timestamp order before calculating metrics.
         for d in dataset:
-            if d["ids"] and d["timestamp"] >= first_attack_start:
-                return {cls._name: d["timestamp"]}
+            ts = d.get("timestamp")
+            if ts is not None and ts >= first_attack_start and d.get("ids"):
+                return {cls._name: ts}
 
-        return {cls._name: np.inf}
+        return {cls._name: None}
